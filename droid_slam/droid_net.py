@@ -144,6 +144,11 @@ class UpdateModule(nn.Module):
 
 
 class DroidNet(nn.Module):
+    
+    fnet: BasicEncoder 
+    cnet: BasicEncoder
+    update: UpdateModule
+    
     def __init__(self):
         super(DroidNet, self).__init__()
         self.fnet = BasicEncoder(output_dim=128, norm_fn='instance')
@@ -152,26 +157,55 @@ class DroidNet(nn.Module):
 
 
     def extract_features(self, images):
-        """ run feeature extraction networks """
+        """run feature extraction networks
 
-        # normalize images
+        Args:
+            images (_type_): videos
+
+        Returns:
+            fmaps (_type): feature map
+            net (_type_): context features
+            inp (_type_): context features (relu activation)
+        """
+
+        # normalize images 
+        # TODO: magic numbers
         images = images[:, :, [2,1,0]] / 255.0
         mean = torch.as_tensor([0.485, 0.456, 0.406], device=images.device)
         std = torch.as_tensor([0.229, 0.224, 0.225], device=images.device)
         images = images.sub_(mean[:, None, None]).div_(std[:, None, None])
 
+        # Feature network results
         fmaps = self.fnet(images)
+        
+        # Context network results
         net = self.cnet(images)
         
+        # Split context channel results 
         net, inp = net.split([128,128], dim=2)
         net = torch.tanh(net)
         inp = torch.relu(inp)
+        
         return fmaps, net, inp
 
 
     def forward(self, Gs, images, disps, intrinsics, graph=None, num_steps=12, fixedp=2):
-        """ Estimates SE3 or Sim3 between pair of frames """
+        """Estimates SE3 or Sim3 between pair of frames
 
+        Args:
+            Gs (_type_): camera poses
+            images (_type_): video data
+            disps (_type_): disparity maps
+            intrinsics (_type_): camera intrinsics
+            graph (_type_, optional): _description_. Defaults to None.
+            num_steps (int, optional): _description_. Defaults to 12.
+            fixedp (int, optional): _description_. Defaults to 2.
+
+        Returns:
+            _type_: _description_
+        """
+
+        # indicies of images in graph
         u = keyframe_indicies(graph)
         ii, jj, kk = graph_to_edge_list(graph)
 

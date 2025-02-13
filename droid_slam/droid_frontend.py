@@ -7,6 +7,13 @@ from factor_graph import FactorGraph
 
 
 class DroidFrontend:
+    """Droid Frontend thread takes in new frames, extracts features, selects keyframes, and performs local bundle adjustment"""
+    
+    net: "DroidNet"
+    video: "DepthVideo"
+    update_op: "Update"
+    graph: FactorGraph
+    
     def __init__(self, net, video, args):
         self.video = video
         self.update_op = net.update
@@ -24,8 +31,10 @@ class DroidFrontend:
         self.iters1 = 4
         self.iters2 = 2
 
+        # How many frames to accumulate before creating frame graph
         self.warmup = args.warmup
         self.beta = args.beta
+        # Non-maximum suppression
         self.frontend_nms = args.frontend_nms
         self.keyframe_thresh = args.keyframe_thresh
         self.frontend_window = args.frontend_window

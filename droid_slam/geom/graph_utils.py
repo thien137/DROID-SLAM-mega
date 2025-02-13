@@ -6,8 +6,19 @@ from collections import OrderedDict
 import lietorch
 from data_readers.rgbd_utils import compute_distance_matrix_flow, compute_distance_matrix_flow2
 
+from typing import Dict
 
-def graph_to_edge_list(graph):
+def graph_to_edge_list(graph: Dict):
+    """Convert graph to edge list
+
+    Args:
+        graph (_type_): _description_
+
+    Returns:
+        ii: start images
+        jj: end images
+        kk: start image id
+    """
     ii, jj, kk = [], [], []
     for s, u in enumerate(graph):
         for v in graph[u]:

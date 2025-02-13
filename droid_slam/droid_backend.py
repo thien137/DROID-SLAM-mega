@@ -7,8 +7,15 @@ from factor_graph import FactorGraph
 
 
 class DroidBackend:
+    """Performs global bundle adjustment over the entire history of keyframes"""
+    
+    net: "DroidNet"
+    video: "DepthVideo"
+    
     def __init__(self, net, video, args):
+        # Depth Video
         self.video = video
+        # Update operation
         self.update_op = net.update
 
         # global optimization window
@@ -18,7 +25,11 @@ class DroidBackend:
         self.upsample = args.upsample
         self.beta = args.beta
         self.backend_thresh = args.backend_thresh
+        
+        # TODO
         self.backend_radius = args.backend_radius
+        
+        # Non-maximum Suppression
         self.backend_nms = args.backend_nms
         
     @torch.no_grad()

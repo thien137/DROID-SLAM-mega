@@ -14,6 +14,39 @@ from torch.multiprocessing import Process
 
 
 class Droid:
+    """INFERENCE TIME Droid Full SLAM System"""
+    
+    net: DroidNet 
+    video: DepthVideo 
+    filterx: MotionFilter 
+    frontend: DroidFrontend
+    backend: DroidBackend   
+    
+    """
+    Example Args
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--datapath")
+    parser.add_argument("--weights", default="droid.pth")
+    parser.add_argument("--buffer", type=int, default=512)
+    parser.add_argument("--image_size", default=[240, 320])
+    parser.add_argument("--disable_vis", action="store_true")
+
+    parser.add_argument("--beta", type=float, default=0.6)
+    parser.add_argument("--filter_thresh", type=float, default=1.75)
+    parser.add_argument("--warmup", type=int, default=12)
+    parser.add_argument("--keyframe_thresh", type=float, default=2.25)
+    parser.add_argument("--frontend_thresh", type=float, default=12.0)
+    parser.add_argument("--frontend_window", type=int, default=25)
+    parser.add_argument("--frontend_radius", type=int, default=2)
+    parser.add_argument("--frontend_nms", type=int, default=1)
+
+    parser.add_argument("--backend_thresh", type=float, default=15.0)
+    parser.add_argument("--backend_radius", type=int, default=2)
+    parser.add_argument("--backend_nms", type=int, default=3)
+    args = parser.parse_args()
+    """
+    
     def __init__(self, args):
         super(Droid, self).__init__()
         self.load_weights(args.weights)
@@ -46,10 +79,12 @@ class Droid:
         """ load trained model weights """
 
         print(weights)
+        # Droid network object
         self.net = DroidNet()
         state_dict = OrderedDict([
             (k.replace("module.", ""), v) for (k, v) in torch.load(weights).items()])
 
+        # TODO figure out what this is for
         state_dict["update.weight.2.weight"] = state_dict["update.weight.2.weight"][:2]
         state_dict["update.weight.2.bias"] = state_dict["update.weight.2.bias"][:2]
         state_dict["update.delta.2.weight"] = state_dict["update.delta.2.weight"][:2]
@@ -73,6 +108,7 @@ class Droid:
 
     def terminate(self, stream=None):
         """ terminate the visualization process, return poses [t, q] """
+        """ run backend global bundle adjustment at the end """
 
         del self.frontend
 
