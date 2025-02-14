@@ -5,6 +5,24 @@ import numpy as np
 from lietorch import SE3
 from factor_graph import FactorGraph
 
+"""
+
+'The backend performs global bundle adjustment over the entire history of keyframes.
+During each iteration, we rebuild the frame graph using the flow between all pairs
+of keyframes, represented as NxN sdistance matrix. We first add edges between
+temporally adjacent keyframes. We then sample new edges from the distance matrix
+in order of increasing flow. With each selected edge, we suppress neighboring edges
+within a distance of 2, where distance is defined as the Chebyshev distance between index 
+pairs.
+
+We then apply the update operator to the entire frame graph, often consisting of thousand
+of frames and edages. Storing the full set of correlation volumes would quickly exceed video
+memory. Instead, we use the memory efficient implementation proposed in RAFT.
+
+During training, we implement dense bundle adjustment in PyTorch to leverage the automatic
+diff
+
+"""
 
 class DroidBackend:
     """Performs global bundle adjustment over the entire history of keyframes"""

@@ -1,23 +1,24 @@
 
 import torch
+from torch import Tensor
 import numpy as np
 from collections import OrderedDict
 
 import lietorch
 from data_readers.rgbd_utils import compute_distance_matrix_flow, compute_distance_matrix_flow2
 
-from typing import Dict
+from typing import *
 
-def graph_to_edge_list(graph: Dict):
+def graph_to_edge_list(graph: OrderedDict[int, List[int]]) -> Tuple[Tensor, Tensor, Tensor]:
     """Convert graph to edge list
 
     Args:
-        graph (_type_): _description_
+        graph (OrderedDict[int, List[int]]): vertices and their edges
 
     Returns:
-        ii: start images
-        jj: end images
-        kk: start image id
+        ii (Tensor): start images indices
+        jj (Tensor): end images indices
+        kk (Tensor): 
     """
     ii, jj, kk = [], [], []
     for s, u in enumerate(graph):
@@ -31,22 +32,71 @@ def graph_to_edge_list(graph: Dict):
     kk = torch.as_tensor(kk)
     return ii, jj, kk
 
-def keyframe_indicies(graph):
+def keyframe_indices(graph: OrderedDict[int, List[int, int]]) -> Tensor:
+    """Return tensor of image indices contained in graph
+
+    Args:
+        graph (OrderedDict[int, List[int, int]]): vertices and their edges
+
+    Returns:
+        Tensor: indices of images contained in graph
+    """
     return torch.as_tensor([u for u in graph])
 
-def meshgrid(m, n, device='cuda'):
+def meshgrid(m: int, 
+             n: int, 
+             device: str='cuda') -> Tuple[Tensor, Tensor]:
+    """Constructs flattened meshgrid
+
+    Args:
+        m (int): height of grid
+        n (int): width of grid
+        device (str): Defaults to 'cuda'
+
+    Returns:
+        ii (Tensor): meshgrid indices along height
+        jj (Tensor): meshgrid indices along width
+    """
     ii, jj = torch.meshgrid(torch.arange(m), torch.arange(n))
     return ii.reshape(-1).to(device), jj.reshape(-1).to(device)
 
-def neighbourhood_graph(n, r):
+def neighbourhood_graph(n: int, 
+                        r: int):
+    """Generates meshgrid indices or edges connecting neighbors
+
+    Args:
+        n (int): number of images
+        r (int): radius
+
+    Returns:
+        ii (Tensor): Starting image indices
+        jj (Tensor): Ending image indices
+    """
+    
     ii, jj = meshgrid(n, n)
     d = (ii - jj).abs()
     keep = (d >= 1) & (d <= r)
     return ii[keep], jj[keep]
 
+def build_frame_graph(poses: Tensor, 
+                      disps: Tensor, 
+                      intrinsics: Tensor, 
+                      num: int=16, 
+                      thresh: int=24.0, 
+                      r: int=2):
+    """Construct a frame graph between co-visible frames (V, E)
 
-def build_frame_graph(poses, disps, intrinsics, num=16, thresh=24.0, r=2):
-    """ construct a frame graph between co-visible frames """
+    Args:
+        poses (Tensor): camera poses
+        disps (Tensor): disparity maps
+        intrinsics (Tensor): camera intrinsics
+        num (int, optional): _description_. Defaults to 16.
+        thresh (int, optional): _description_. Defaults to 24.0.
+        r (int, optional): _description_. Defaults to 2.
+
+    Returns:
+        graph OrderedList[int, List[int, int]]: graph of vertices and their images
+    """
     N = poses.shape[1]
     poses = poses[0].cpu().numpy()
     disps = disps[0][:,3::8,3::8].cpu().numpy()
@@ -77,48 +127,3 @@ def build_frame_graph(poses, disps, intrinsics, num=16, thresh=24.0, r=2):
             break
     
     return graph
-
-
-
-def build_frame_graph_v2(poses, disps, intrinsics, num=16, thresh=24.0, r=2):
-    """ construct a frame graph between co-visible frames """
-    N = poses.shape[1]
-    # poses = poses[0].cpu().numpy()
-    # disps = disps[0].cpu().numpy()
-    # intrinsics = intrinsics[0].cpu().numpy()
-    d = compute_distance_matrix_flow2(poses, disps, intrinsics)
-
-    # import matplotlib.pyplot as plt
-    # plt.imshow(d)
-    # plt.show()
-
-    count = 0
-    graph = OrderedDict()
-    
-    for i in range(N):
-        graph[i] = []
-        d[i,i] = np.inf
-        for j in range(i-r, i+r+1):
-            if 0 <= j < N and i != j:
-                graph[i].append(j)
-                d[i,j] = np.inf
-                count += 1
-
-    while 1:
-        ix = np.argmin(d)
-        i, j = ix // N, ix % N
-
-        if d[i,j] < thresh:
-            graph[i].append(j)
-
-            for i1 in range(i-1, i+2):
-                for j1 in range(j-1, j+2):
-                    if 0 <= i1 < N and 0 <= j1 < N:
-                        d[i1, j1] = np.inf
-
-            count += 1
-        else:
-            break
-    
-    return graph
-

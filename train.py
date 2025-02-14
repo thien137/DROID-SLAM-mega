@@ -16,6 +16,7 @@ from geom.graph_utils import build_frame_graph
 
 # network
 from droid_net import DroidNet
+from motion_net import MotionNet
 from logger import Logger
 
 # DDP training
@@ -25,6 +26,12 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 def setup_ddp(gpu, args):
+    """Set up distributed data parallel enviornment
+
+    Args:
+        gpu (_type_): _description_
+        args (_type_): _description_
+    """
     dist.init_process_group(                                   
     	backend='nccl',                                         
    		init_method='env://',     
@@ -35,6 +42,12 @@ def setup_ddp(gpu, args):
     torch.cuda.set_device(gpu)
 
 def show_image(image):
+    """Display given image
+
+    Args:
+        image (_type_): _description_
+    """
+    
     image = image.permute(1, 2, 0).cpu().numpy()
     cv2.imshow('image', image / 255.0)
     cv2.waitKey()
@@ -51,51 +64,68 @@ def train(gpu, args):
     model = DroidNet() # Create Droid Net
     model.cuda() # Send Droid Net to GPU
     model.train() # Set Droid Net to training mode
+    
+    motion_model = MotionNet()
+    motion_model.cuda()
+    motion_model.train()
 
     # Each gpu gets copy of model
     # Each gpu processes a subset of the batch
     # Gradients are averaged across all GPUs
     # Multiprocess
-    model = DDP(model, device_ids=[gpu], find_unused_parameters=False)
+    model = DDP(model, device_ids=[gpu], find_unused_parameters=False) # TODO: find_unused_parameters?
+    motion_model = DDP(motion_model, device_ids=[gpu], find_unused_parameters=False)
 
     # Load checkpoint of model if exists
     if args.ckpt is not None:
         model.load_state_dict(torch.load(args.ckpt))
 
     # fetch dataloader
-    db = dataset_factory(['tartan'], datapath=args.datapath, n_frames=args.n_frames, fmin=args.fmin, fmax=args.fmax)
+    # TODO: set this to only static synthetic data 'tartan'?
+    static_db = dataset_factory(['tartan'], datapath=args.datapath, n_frames=args.n_frames, fmin=args.fmin, fmax=args.fmax)
+    # TODO: setup this to only synthetic dynamic videos
+    dynamic_db = dataset_factory()
     
     # DistributedSampler ensures each process of DDP gets unique subset of dataset
-    train_sampler = torch.utils.data.distributed.DistributedSampler(
-        db, shuffle=True, num_replicas=args.world_size, rank=gpu)
+    static_sampler = torch.utils.data.distributed.DistributedSampler(
+        static_db, shuffle=True, num_replicas=args.world_size, rank=gpu)
+    dynamic_sampler = torch.utils.data.distributed.DistributedSampelr(
+        dynamic_db, shuffle=True, num_replicas=args.world_size, rank=gpu
+    )
     
     # Training dataloader
-    train_loader = DataLoader(db, batch_size=args.batch, sampler=train_sampler, num_workers=2)
+    # TODO: may want to separate batch sizes (or args in general for both models)
+    static_loader = DataLoader(static_db, batch_size=args.batch, sampler=static_sampler, num_workers=2)
+    dynamic_loader = DataLoader(dynamic_db, batch_size=args.batch, sampler=dynamic_sampler, num_workers=2)
+
 
     # fetch optimizer -> Cyclical Learning Rate
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, 
+    static_optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
+    static_scheduler = torch.optim.lr_scheduler.OneCycleLR(static_optimizer, 
         args.lr, args.steps, pct_start=0.01, cycle_momentum=False)
 
     # Logging training information
-    logger = Logger(args.name, scheduler)
+    logger = Logger(args.name, static_scheduler)
     should_keep_training = True
     total_steps = 0
-
+    
+    ### Main Model Training ###
+    
     while should_keep_training:
-        for i_batch, item in enumerate(train_loader):
-            optimizer.zero_grad()
+        for i_batch, item in enumerate(static_loader):
+            static_optimizer.zero_grad()
 
             # training data
             # input: images, intrinsics
             # ground truth: camera poses, disparity maps
+            # (batch, num, channels, height, width)
             images, poses, disps, intrinsics = [x.to('cuda') for x in item]
 
             # convert poses w2c -> c2w
             Ps = SE3(poses).inv()
             Gs = SE3.IdentityLike(Ps)
 
-            # randomize frame graph
+            # randomize frame graph half of the time
             if np.random.rand() < 0.5:
                 graph = build_frame_graph(poses, disps, intrinsics, num=args.edges)
             else:
@@ -113,6 +143,7 @@ def train(gpu, args):
             while r < args.restart_prob:
                 r = rng.random()
                 
+                # Divide by 8 to deal with 8x downsampling?
                 intrinsics0 = intrinsics / 8.0
                 
                 # Get poses, disps, and residuals from 
@@ -131,6 +162,7 @@ def train(gpu, args):
                 Gs = poses_est[-1].detach()
                 disp0 = disps_est[-1][:,:,3::8,3::8].detach()
 
+            # update metrics as we train
             metrics = {}
             metrics.update(geo_metrics)
             metrics.update(res_metrics)
@@ -138,25 +170,54 @@ def train(gpu, args):
 
             # Clip gradients to prevent exploding gradients
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
-            optimizer.step()
-            scheduler.step()
+            static_optimizer.step()
+            static_scheduler.step()
             
             total_steps += 1
 
             if gpu == 0:
+                # log training metrics
                 logger.push(metrics)
 
+            # Checkpoint every 10000 steps
             if total_steps % 10000 == 0 and gpu == 0:
                 PATH = 'checkpoints/%s_%06d.pth' % (args.name, total_steps)
                 torch.save(model.state_dict(), PATH)
-
+            
+            # keep training?
             if total_steps >= args.steps:
                 should_keep_training = False
                 break
     
+    ### Motion Module Training ###  
+    
+    # fetch optimizer -> Cyclical Learning Rate
+    static_optimizer = torch.optim.Adam(motion_model.parameters(), lr=args.lr, weight_decay=1e-5)
+    static_scheduler = torch.optim.lr_scheduler.OneCycleLR(static_optimizer, 
+        args.lr, args.steps, pct_start=0.01, cycle_momentum=False)    
+    
+    should_keep_training = True
+    total_steps = 0
+
+    while should_keep_training:
+        for i_batch, item in enumerate(static_loader):
+            static_optimizer.zero_grad()
+
+            # training data
+            # input: images, intrinsics
+            # ground truth: camera poses, disparity maps
+            # (batch, num, channels, height, width)
+            images, poses, disps, intrinsics = [x.to('cuda') for x in item]
+
+            # convert poses w2c -> c2w
+            Ps = SE3(poses).inv()
+            Gs = SE3.IdentityLike(Ps)
+
+            # TODO: complete this training loop
+            break
+            
     # clean up resources related to this process group
     dist.destroy_process_group()
-                
 
 if __name__ == '__main__':
     import argparse

@@ -35,7 +35,7 @@ def BA(target, weight, eta, poses, disps, intrinsics, ii, jj, fixedp=1, rig=1):
     N = ii.shape[0]
     D = poses.manifold_dim
 
-    ### 1: commpute jacobians and residuals ###
+    ### 1: compute jacobians and residuals ###
     coords, valid, (Ji, Jj, Jz) = pops.projective_transform(
         poses, disps, intrinsics, ii, jj, jacobian=True)
 

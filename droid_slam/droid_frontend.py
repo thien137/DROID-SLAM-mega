@@ -5,6 +5,21 @@ import numpy as np
 from lietorch import SE3
 from factor_graph import FactorGraph
 
+"""
+
+'The frontend operates directly on the incoming video stream. It maintains a collection of
+keyframes and a frame graph storing edges between covisible keyframes. Keyframe poses and 
+depths are actively being optimized. Features are first extracted from the incoming frames.
+The new frame is then added to the frame graph adding edges with its 3 closest neighbors
+as measured by mean optical flow. The pose is initialized using a linear motion model. We
+then apply several iterations of the update operator to update keyframe poses and depths.
+We fix the first two poses to remove gauge freedom but treat all depths as free variables.
+
+After the new frame is tracked, we select a keyframe for removal. We compute distance between
+pairs of frames by computing the average optical flow magnitude and remove redundant frames.
+If no frame is a good candidate for removal, we remove the oldest keyframe.'
+    
+"""
 
 class DroidFrontend:
     """Droid Frontend thread takes in new frames, extracts features, selects keyframes, and performs local bundle adjustment"""

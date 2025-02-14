@@ -10,7 +10,15 @@ import geom.projective_ops as pops
 
 
 class PoseTrajectoryFiller:
-    """ This class is used to fill in non-keyframe poses """
+    """ This class is used to fill in non-keyframe poses 
+    
+    'We only perform full bundle adjustment on keyframe images. In order
+    to recover the poses of non-keyframes, we perform motion-only bundle
+    adjustment by iteratively estimating flow between each keyframe and its
+    neighboring non-keyframes. During testing, we evaluate on full camera
+    trajectory, not just keyframes.'
+    
+    """
 
     def __init__(self, net, video, device="cuda:0"):
         

@@ -8,13 +8,32 @@ import geom.projective_ops as pops
 from scipy.spatial.transform import Rotation
 
 
-def parse_list(filepath, skiprows=0):
-    """ read list data """
+def parse_list(filepath: str, skiprows: int=0) -> np.ndarray:
+    """Read list data
+
+    Args:
+        filepath (str): file path name
+        skiprows (int, optional): How many rows to skip while reading. Defaults to 0.
+
+    Returns:
+        np.ndarray: list read from file
+    """
+    
     data = np.loadtxt(filepath, delimiter=' ', dtype=np.unicode_, skiprows=skiprows)
     return data
 
 def associate_frames(tstamp_image, tstamp_depth, tstamp_pose, max_dt=1.0):
-    """ pair images, depths, and poses """
+    """Pair frames togewther
+
+    Args:
+        tstamp_image (_type_): _description_
+        tstamp_depth (_type_): _description_
+        tstamp_pose (_type_): _description_
+        max_dt (float, optional): _description_. Defaults to 1.0.
+
+    Returns:
+        _type_: _description_
+    """
     associations = []
     for i, t in enumerate(tstamp_image):
         if tstamp_pose is None:

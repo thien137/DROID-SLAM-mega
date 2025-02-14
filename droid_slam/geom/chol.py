@@ -3,6 +3,16 @@ import torch.nn.functional as F
 import geom.projective_ops as pops
 
 class CholeskySolver(torch.autograd.Function):
+    """'At inference time, we use a custom CUDA kernel which takes
+    advantage of the block-sparse structure of the problem, then perform
+    sparse Cholesky decomposition on the reduced camera block.'
+
+    Args:
+        torch (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     @staticmethod
     def forward(ctx, H, b):
         # don't crash training if cholesky decomp fails

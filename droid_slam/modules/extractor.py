@@ -2,6 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+"""
+
+'Architecture of the feature and context encoders. Both extract features at 1/8
+the input image resolution using a set of 6 basic residual blocks. Instance
+normalization is used in the fetaure encoder; no normalization is used in 
+the context encoder. The feature encoder outputs features with dimension D=128
+which the context encoder outputs features with dimension D=256.'
+
+"""
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_planes, planes, norm_fn='group', stride=1):

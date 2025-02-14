@@ -17,7 +17,6 @@ def pose_metrics(dE):
     s_err = (s - 1.0).abs()
     return r_err, t_err, s_err
 
-
 def fit_scale(Ps, Gs):
     b = Ps.shape[0]
     t1 = Ps.data[...,:3].detach().reshape(b, -1)
@@ -25,7 +24,6 @@ def fit_scale(Ps, Gs):
 
     s = (t1*t2).sum(-1) / ((t2*t2).sum(-1) + 1e-8)
     return s
-
 
 def geodesic_loss(Ps, Gs, graph, gamma=0.9, do_scale=True):
     """ Loss function for training network """
@@ -73,7 +71,6 @@ def geodesic_loss(Ps, Gs, graph, gamma=0.9, do_scale=True):
 
     return geodesic_loss, metrics
 
-
 def residual_loss(residuals, gamma=0.9):
     """ loss on system residuals """
     residual_loss = 0.0
@@ -84,7 +81,6 @@ def residual_loss(residuals, gamma=0.9):
         residual_loss += w * residuals[i].abs().mean()
 
     return residual_loss, {'residual': residual_loss.item()}
-
 
 def flow_loss(Ps, disps, poses_est, disps_est, intrinsics, graph, gamma=0.9):
     """ optical flow loss """

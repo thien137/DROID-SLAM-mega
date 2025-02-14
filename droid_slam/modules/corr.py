@@ -4,7 +4,16 @@ import torch.nn.functional as F
 import droid_backends
 
 class CorrSampler(torch.autograd.Function):
+    """'We define a lookup operator which indexes the correlation volume
+    using a grid with radius r.'
 
+    Args:
+        torch (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    
     @staticmethod
     def forward(ctx, volume, coords, radius):
         ctx.save_for_backward(volume,coords)
@@ -21,7 +30,15 @@ class CorrSampler(torch.autograd.Function):
 
 
 class CorrBlock:
-    def __init__(self, fmap1, fmap2, num_levels=4, radius=3):
+    """'For each edge in the frame graph, we compute a 4D correlation volume by taking
+    the dot product between all-pairs of feature vectors. We then perform average pooling of the
+    last two dimension of the correlation volume following RAFT to form a correlation pyramid.'
+    """
+    def __init__(self, 
+                 fmap1, # feature map ii
+                 fmap2, # feature map jj
+                 num_levels=4, # height of correlation pyramid
+                 radius=3):
         self.num_levels = num_levels
         self.radius = radius
         self.corr_pyramid = []
@@ -59,7 +76,6 @@ class CorrBlock:
             self.corr_pyramid[i] = self.corr_pyramid[i][index]
         return self
 
-
     @staticmethod
     def corr(fmap1, fmap2):
         """ all-pairs correlation """
@@ -70,6 +86,7 @@ class CorrBlock:
         corr = torch.matmul(fmap1.transpose(1,2), fmap2)
         return corr.view(batch, num, ht, wd, ht, wd)
 
+######## BA Lowmem ########
 
 class CorrLayer(torch.autograd.Function):
     @staticmethod
@@ -86,7 +103,6 @@ class CorrLayer(torch.autograd.Function):
         fmap1_grad, fmap2_grad, coords_grad = \
             droid_backends.altcorr_backward(fmap1, fmap2, coords, grad_corr, ctx.r)
         return fmap1_grad, fmap2_grad, coords_grad, None
-
 
 class AltCorrBlock:
     def __init__(self, fmaps, num_levels=4, radius=3):
